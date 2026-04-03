@@ -1,12 +1,3 @@
----
-title: OpenEnv Email Triage
-emoji: 📧
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
----
-
 # Enterprise Email Triage & Response Environment (EETRE)
 
 Live demo: https://Vetri17-openenv-email-triage-benchmark.hf.space
