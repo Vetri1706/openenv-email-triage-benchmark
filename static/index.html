@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenEnv Health UI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main class="health-wrap">
+        <h1>OpenEnv Email Triage</h1>
+        <p class="sub">Minimal health UI for deployment sanity checks.</p>
+
+        <section class="card">
+            <div class="row">
+                <span>Server status</span>
+                <strong id="status-pill" class="pill pending">Checking...</strong>
+            </div>
+            <div class="row">
+                <span>Endpoint</span>
+                <code>/health</code>
+            </div>
+            <div class="row">
+                <span>Last check</span>
+                <span id="last-check">—</span>
+            </div>
+            <div class="actions">
+                <button id="check-health" class="btn primary">Check Health</button>
+                <button id="test-reset" class="btn">Test Reset</button>
+            </div>
+            <pre id="health-json" class="json">{ "status": "pending" }</pre>
+        </section>
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

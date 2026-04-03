@@ -1,0 +1,32 @@
+name: enterprise-email-triage-response-environment
+version: "1.0.0"
+description: >
+  Enterprise Email Triage & Response Environment (EETRE): a real-world OpenEnv
+  environment where agents triage corporate inboxes, choose operational actions,
+  and generate professional responses under policy-grounded grading with bounded stochastic variance.
+entrypoint: app.py
+observation_model: env.models.Observation
+action_model: env.models.Action
+reward_model: env.models.Reward
+state_model: env.models.Observation
+tasks:
+  - id: easy
+    name: Single Support Email Handling
+    difficulty: easy
+    objective: Process one support request with a correct and useful reply.
+    max_steps: 3
+  - id: medium
+    name: Mixed Spam and Support Inbox
+    difficulty: medium
+    objective: Separate spam from real support and provide incident response.
+    max_steps: 8
+  - id: hard
+    name: Enterprise Triage Under Time Pressure
+    difficulty: hard
+    objective: Prioritize phishing, urgent internal escalation, and billing dispute.
+    max_steps: 10
+  - id: killer
+    name: Meeting Scheduling Conflict Resolution
+    difficulty: hard
+    objective: Resolve a threaded meeting conflict by proposing alternatives, tracking context, and escalating only for critical internal conflicts.
+    max_steps: 8
