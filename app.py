@@ -17,7 +17,7 @@ load_dotenv()
 
 
 class ResetRequest(BaseModel):
-    task_id: Optional[str] = None
+    task_id: Optional[str] = "easy"
 
 
 class LiveResetRequest(BaseModel):
@@ -71,9 +71,10 @@ def tasks() -> Dict[str, Any]:
 
 
 @app.post("/reset")
-def reset(payload: ResetRequest) -> Dict[str, Any]:
+def reset(payload: Optional[ResetRequest] = None) -> Dict[str, Any]:
+    task_id = payload.task_id if payload and payload.task_id else "easy"
     try:
-        observation = environment.reset(payload.task_id)
+        observation = environment.reset(task_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"observation": observation.model_dump()}
