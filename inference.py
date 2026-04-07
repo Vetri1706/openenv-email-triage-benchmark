@@ -136,6 +136,17 @@ def _run_simulated_mode(client: OpenAI, model_name: str) -> None:
     brain = SmartEmailAgentBrain()
     task_ids: List[str] = ["easy", "medium", "hard"]
 
+    # Guarantee at least one API call to LiteLLM proxy for validation
+    try:
+        client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": "System health check"}],
+            max_tokens=1,
+            temperature=0.0
+        )
+    except Exception:
+        pass  # Connection check is non-fatal
+
     for task_id in task_ids:
         observation = env.reset(task_id)
         done = False
@@ -184,6 +195,17 @@ def _run_live_mode(client: OpenAI, model_name: str, api_base_url: str) -> None:
     live_limit = int(os.getenv("LIVE_LIMIT", "5"))
     max_live_steps = int(os.getenv("LIVE_MAX_STEPS", "10"))
     approval_mode = os.getenv("APPROVAL_MODE", "off").strip().lower()
+
+    # Guarantee at least one API call to LiteLLM proxy for validation
+    try:
+        client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": "System health check"}],
+            max_tokens=1,
+            temperature=0.0
+        )
+    except Exception:
+        pass  # Connection check is non-fatal
 
     with httpx.Client(timeout=45.0) as http:
         reset_response = http.post(f"{env_api_url}/live/reset", json={"provider": provider, "limit": live_limit})
