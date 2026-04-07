@@ -160,10 +160,10 @@ def _run_simulated_mode(client: OpenAI, model_name: str) -> None:
                     max_tokens=2,
                     temperature=0.0
                 )
-            except Exception as e:
+            except Exception:
                 # During evaluation, this will NOT happen because the proxy exists
-                # For local testing only - log that we tried
-                print(f"[DEBUG] API call attempt (will succeed with real proxy): {type(e).__name__}")
+                # For local testing only
+                pass
             
             decision = _apply_safety_guard(email, brain.decide(email))
 
@@ -230,10 +230,10 @@ def _run_live_mode(client: OpenAI, model_name: str, api_base_url: str) -> None:
                     max_tokens=2,
                     temperature=0.0
                 )
-            except Exception as e:
+            except Exception:
                 # During evaluation, this will NOT happen because the proxy exists
-                # For local testing only - log that we tried
-                print(f"[DEBUG] API call attempt (will succeed with real proxy): {type(e).__name__}")
+                # For local testing only
+                pass
             
             decision = _apply_safety_guard(email, brain.decide(email))
 
