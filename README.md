@@ -1,3 +1,12 @@
+---
+title: Enterprise Email Triage & Response Environment
+emoji: 📧
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # Enterprise Email Triage & Response Environment (EETRE)
 
 Live demo: https://Vetri17-openenv-email-triage-benchmark.hf.space
