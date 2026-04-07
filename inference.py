@@ -257,13 +257,17 @@ def _run_live_mode(client: OpenAI, model_name: str, api_base_url: str) -> None:
 
 
 def run_baseline() -> None:
-    api_base_url = os.getenv("API_BASE_URL", "https://openrouter.ai/api/v1")
-    model_name = os.getenv("MODEL_NAME", "nvidia/nemotron-3-super-120b-a12b:free")
-    api_key = os.getenv("OPENAI_API_KEY", "") or os.getenv("HF_TOKEN", "")
+    api_base_url = os.getenv("API_BASE_URL")
+    model_name = os.getenv("MODEL_NAME")
+    api_key = os.getenv("API_KEY")
     mode = os.getenv("MODE", "simulated").strip().lower()
 
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is required")
+        raise RuntimeError("API_KEY is required")
+    if not api_base_url:
+        raise RuntimeError("API_BASE_URL is required")
+    if not model_name:
+        raise RuntimeError("MODEL_NAME is required")
 
     client = _build_client(api_base_url, api_key)
 

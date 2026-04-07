@@ -617,9 +617,9 @@ class LiveEmailSession:
         )
 
     def _generate_ai_reply(self, email_record: Email) -> str:
-        api_key = os.getenv("OPENAI_API_KEY", "") or os.getenv("HF_TOKEN", "")
-        api_base_url = os.getenv("API_BASE_URL", "https://openrouter.ai/api/v1")
-        model_name = os.getenv("MODEL_NAME", "nvidia/nemotron-3-super-120b-a12b:free")
+        api_key = os.getenv("API_KEY")
+        api_base_url = os.getenv("API_BASE_URL")
+        model_name = os.getenv("MODEL_NAME")
 
         if not api_key:
             return (

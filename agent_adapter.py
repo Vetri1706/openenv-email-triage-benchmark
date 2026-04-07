@@ -63,9 +63,9 @@ class OpenEnvAgentAdapter:
         self.provider = provider
         self.planner_mode = os.getenv("ADAPTER_PLANNER_MODE", "on").strip().lower() != "off"
 
-        resolved_api_base_url = api_base_url or os.getenv("API_BASE_URL", "https://openrouter.ai/api/v1")
-        self.model_name = model_name or os.getenv("MODEL_NAME", "nvidia/nemotron-3-super-120b-a12b:free")
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY", "") or os.getenv("HF_TOKEN", "")
+        resolved_api_base_url = api_base_url or os.getenv("API_BASE_URL")
+        self.model_name = model_name or os.getenv("MODEL_NAME")
+        self.api_key = api_key or os.getenv("API_KEY")
 
         self.client: Optional[OpenAI] = None
         if self.api_key:
