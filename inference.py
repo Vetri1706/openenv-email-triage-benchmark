@@ -293,17 +293,22 @@ def _run_live_mode(client: OpenAI, model_name: str, api_base_url: str) -> None:
 
 
 def run_baseline() -> None:
-    api_base_url = os.getenv("API_BASE_URL")
-    model_name = os.getenv("MODEL_NAME")
-    api_key = os.getenv("API_KEY")
+    api_base_url = os.getenv("API_BASE_URL") or "http://127.0.0.1:9"
+    api_key = os.getenv("API_KEY") or "test-key"
+
+    model_name = (
+        os.getenv("MODEL_NAME")
+        or os.getenv("OPENAI_MODEL")
+        or os.getenv("LITELLM_MODEL")
+        or "gpt-4o-mini"
+    )
+
     mode = os.getenv("MODE", "simulated").strip().lower()
 
     if not api_key:
         raise RuntimeError("API_KEY is required")
     if not api_base_url:
         raise RuntimeError("API_BASE_URL is required")
-    if not model_name:
-        raise RuntimeError("MODEL_NAME is required")
 
     client = _build_client(api_base_url, api_key)
 
