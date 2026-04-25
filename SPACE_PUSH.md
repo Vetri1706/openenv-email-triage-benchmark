@@ -1,52 +1,65 @@
 # Pushing this Space to Hugging Face (`hf` remote)
 
-Hugging Face **rejects normal Git blobs** for PNG and other binaries on the Hub. You must use **Git Xet** so those files go through Xet storage.
+Hugging Face **rejects normal Git blobs** for PNGs in many Space repos unless they go through **Xet** or you **do not ship those binaries** in the Git pack you push.
 
-## One-time setup (Linux / macOS)
+You have **two** workable paths.
 
-1. Install **Git LFS** if you do not have it: [git-lfs.com](https://git-lfs.com/)
+---
 
-2. Install **Git Xet** (pick one):
+## Option A — Keep PNGs in the Space repo (use Git Xet)
 
-   **Install script (Linux / macOS amd64 or aarch64):**
+Official fix: install **Git Xet** so PNGs upload through Xet storage.
+
+1. Install **Git LFS**: [git-lfs.com](https://git-lfs.com/)
+2. Install **Git Xet** (Linux / macOS):
 
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/huggingface/xet-core/refs/heads/main/git_xet/install.sh | sh
    ```
 
-   **Homebrew (macOS):**
+   Or Homebrew: `brew install git-xet && git xet install`
 
-   ```bash
-   brew install git-xet
-   git xet install
-   ```
-
-3. Register the filter in **this repo** (run inside the project root):
+3. In **this repo**:
 
    ```bash
    cd /path/to/openenv-email-triage
    git xet install
-   ```
-
-4. Confirm:
-
-   ```bash
    git xet --version
    ```
 
-## Push to the Space
+4. Push:
 
-```bash
-git push hf main
-```
+   ```bash
+   git push hf main
+   ```
 
-Use your real branch name if it is not `main`.
+Docs: [Using Xet Storage (Git)](https://huggingface.co/docs/hub/xet/using-xet-storage#git)
 
-## If you still see Xet errors
+---
 
-- Upgrade: `pip install -U "huggingface_hub>=0.32"` (pulls in `hf_xet` for Python workflows).
-- Docs: [Using Xet Storage (Git)](https://huggingface.co/docs/hub/xet/using-xet-storage#git)
+## Option B — No Xet: push code only, images stay on GitHub (recommended if A is blocked)
+
+Your README now uses **`raw.githubusercontent.com/.../main/plots/`** and **`.../main/proofs/`** so the Space README can show images **without** storing PNGs in the Space Git repo.
+
+1. **Push GitHub first** (so those raw URLs return 200):
+
+   ```bash
+   git push origin main
+   ```
+
+2. **Force-push a lite tree** to the Space (drops `plots/` and `proofs/` from the pack you send to `hf`):
+
+   ```bash
+   chmod +x scripts/push_hf_lite.sh
+   ./scripts/push_hf_lite.sh
+   ```
+
+   Non-interactive: `./scripts/push_hf_lite.sh --yes`
+
+This creates a **new single-commit history** on `hf main` (force). Your **GitHub** repo keeps the full history including PNGs for judges and for `raw.githubusercontent.com`.
+
+---
 
 ## Note on duplicate `Plots/`
 
-The repo keeps training images under **`plots/`** (lowercase) only. The old **`Plots/`** folder was removed to avoid two copies of the same PNGs.
+Only **`plots/`** (lowercase) is used. **`Plots/`** was removed; **`Plots/`** is in `.gitignore` so it is not re-added by mistake.
