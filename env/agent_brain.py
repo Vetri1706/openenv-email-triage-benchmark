@@ -20,6 +20,41 @@ TRUSTED_PROMOTIONAL_DOMAINS = {
 }
 
 
+AUTO_BULK_TOKENS = [
+    "noreply",
+    "no-reply",
+    "do-not-reply",
+    "mailer-daemon",
+    "newsletter",
+    "digest",
+    "unsubscribe",
+    "job alert",
+    "promotion",
+    "notifications@",
+    "via linkedin",
+    "learning content is due",
+    "nowlearning",
+    "university",
+]
+
+
+TECHNICAL_INCIDENT_TOKENS = [
+    "incident",
+    "timeout",
+    "production",
+    "outage",
+    "error",
+    "failed",
+    "failure",
+    "build failed",
+    "run failed",
+    "deploy failed",
+    "delivery status notification",
+    "cannot sign in",
+    "api",
+]
+
+
 def _sender_domain(email: Email) -> str:
     sender = email.sender.lower()
     if "@" not in sender:
@@ -31,6 +66,11 @@ def _sender_domain(email: Email) -> str:
 def _is_trusted_promotional_sender(email: Email) -> bool:
     domain = _sender_domain(email)
     return any(domain == trusted or domain.endswith(f".{trusted}") for trusted in TRUSTED_PROMOTIONAL_DOMAINS)
+
+
+def _looks_bulk_or_automated(email: Email) -> bool:
+    text = f"{email.sender} {email.subject} {email.body}".lower()
+    return any(token in text for token in AUTO_BULK_TOKENS)
 
 
 @dataclass(frozen=True)
@@ -64,7 +104,7 @@ class SmartEmailAgentBrain:
         if any(token in text for token in ["invoice", "refund", "charged", "billing"]):
             path.append("Intent matched billing_resolution")
             return "billing_resolution", path
-        if any(token in text for token in ["incident", "timeout", "production", "outage", "error"]):
+        if any(token in text for token in TECHNICAL_INCIDENT_TOKENS):
             path.append("Intent matched technical_support")
             return "technical_support", path
         if any(token in text for token in ["meeting", "calendar", "schedule", "reschedule", "slot", "availability", "conflict"]):
@@ -122,7 +162,7 @@ class SmartEmailAgentBrain:
             path.append("Detected security governance escalation markers")
             return "internal", "high", path
 
-        if any(token in text for token in ["incident", "timeout", "production", "api", "support", "cannot sign in"]):
+        if any(token in text for token in TECHNICAL_INCIDENT_TOKENS + ["support"]):
             path.append("Detected support/incident language")
             return "support", "medium", path
 
@@ -150,13 +190,17 @@ class SmartEmailAgentBrain:
             return "Escalated to the responsible internal owner for immediate coordination."
         return "Message reviewed and routed according to policy."
 
-    def choose_action(self, email: Email, classification: Classification) -> tuple[Literal["reply", "escalate", "archive", "mark_spam"], str]:
+    def choose_action(
+        self,
+        email: Email,
+        classification: Classification,
+        intent: str,
+    ) -> tuple[Literal["reply", "escalate", "archive", "mark_spam"], str]:
         text = f"{email.sender} {email.subject} {email.body}".lower()
         if email.type in {"spam", "phishing"}:
+            if any(token in text for token in TECHNICAL_INCIDENT_TOKENS):
+                return "escalate", "Incident-like signal overrides noisy spam type hint; escalating for safe handling"
             return "mark_spam", "Message type is suspicious; marking as spam"
-
-        if any(token in text for token in ["meeting", "calendar", "schedule", "reschedule", "slot", "availability", "conflict"]):
-            return "reply", "Scheduling conflict requires a proposed alternative slot response"
 
         if classification == "spam":
             if _is_trusted_promotional_sender(email) or any(token in text for token in ["noreply", "no-reply", "newsletter", "unsubscribe", "job alert", "apply now", "digest"]):
@@ -165,9 +209,19 @@ class SmartEmailAgentBrain:
 
         if classification == "phishing":
             return "mark_spam", "Safety policy blocks replies to suspicious messages"
+        if any(token in text for token in ["meeting", "calendar", "schedule", "reschedule", "slot", "availability", "conflict"]):
+            return "reply", "Scheduling conflict requires a proposed alternative slot response"
         if classification == "internal":
             return "escalate", "Internal urgent request requires escalation path"
         if classification in {"billing", "support"}:
+            if email.priority == "low" and intent in {"general_inquiry", "informational_bulk"}:
+                if any(token in text for token in TECHNICAL_INCIDENT_TOKENS):
+                    return "escalate", "Low-priority automated incident-like alert escalated for review"
+                return "archive", "Low-priority general/bulk message archived to avoid unnecessary replies"
+            if _looks_bulk_or_automated(email):
+                if any(token in text for token in TECHNICAL_INCIDENT_TOKENS):
+                    return "escalate", "Automated incident alert detected; escalating instead of replying to no-reply/bulk sender"
+                return "archive", "Bulk/automated sender detected; avoid low-value auto-reply"
             return "reply", "Customer-facing issue requires acknowledgment and next steps"
         return "archive", "No action signal found; archiving"
 
@@ -179,7 +233,7 @@ class SmartEmailAgentBrain:
             decision_path.append(f"Aligned classification from {classification} to {aligned_classification} based on intent={intent}")
             classification = aligned_classification
         decision_path = intent_path + decision_path
-        action_type, reason = self.choose_action(email, classification)
+        action_type, reason = self.choose_action(email, classification, intent)
 
         response = None
         if action_type == "reply":

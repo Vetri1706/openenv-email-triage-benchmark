@@ -82,6 +82,65 @@ def _build_email_record(email_id: str, sender: str, subject: str, body: str) -> 
     )
 
 
+def _parse_csv_env(name: str) -> List[str]:
+    raw = os.getenv(name, "")
+    return [item.strip().lower() for item in raw.split(",") if item.strip()]
+
+
+def _sender_email(sender: str) -> str:
+    value = (sender or "").strip().lower()
+    if "<" in value and ">" in value:
+        start = value.find("<") + 1
+        end = value.find(">", start)
+        if end > start:
+            return value[start:end].strip()
+    return value
+
+
+def _sender_domain(sender: str) -> str:
+    email_addr = _sender_email(sender)
+    if "@" not in email_addr:
+        return ""
+    return email_addr.split("@", 1)[1].strip()
+
+
+def _should_send_escalation_notification(email_record: Email) -> tuple[bool, str]:
+    text = f"{email_record.sender} {email_record.subject} {email_record.body}".lower()
+    sender = _sender_email(email_record.sender)
+    domain = _sender_domain(email_record.sender)
+    priority_rank = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+    min_priority_name = os.getenv("ESCALATION_MIN_PRIORITY", "low").strip().lower()
+    min_priority = priority_rank.get(min_priority_name, 1)
+    current_priority = priority_rank.get(email_record.priority, 1)
+    if current_priority < min_priority:
+        return False, f"priority<{min_priority_name}"
+
+    blocked_senders = _parse_csv_env("ESCALATION_BLOCKED_SENDERS")
+    blocked_domains = _parse_csv_env("ESCALATION_BLOCKED_DOMAINS")
+    if any(token in sender for token in blocked_senders):
+        return False, "sender_blocked"
+    if any(domain == d or domain.endswith(f".{d}") for d in blocked_domains):
+        return False, "domain_blocked"
+
+    allowed_senders = _parse_csv_env("ESCALATION_ALLOWED_SENDERS")
+    allowed_domains = _parse_csv_env("ESCALATION_ALLOWED_DOMAINS")
+    allowed_keywords = _parse_csv_env("ESCALATION_ALLOWED_KEYWORDS")
+
+    allow_rules_configured = bool(allowed_senders or allowed_domains or allowed_keywords)
+    if not allow_rules_configured:
+        return True, "allowed_default"
+
+    sender_match = any(token in sender for token in allowed_senders)
+    domain_match = any(domain == d or domain.endswith(f".{d}") for d in allowed_domains)
+    keyword_match = any(token in text for token in allowed_keywords)
+
+    if sender_match or domain_match or keyword_match:
+        return True, "allowed_match"
+
+    return False, "no_allow_rule_match"
+
+
 @dataclass
 class ProviderEmail:
     provider_message_id: str
@@ -130,14 +189,19 @@ class ImapProvider(LiveEmailProvider):
 
     def fetch_inbox(self, limit: int) -> List[ProviderEmail]:
         client = self._connect_imap()
-        client.select(self.mailbox)
-        _, data = client.uid("search", None, "UNSEEN")
+        # Read-only select avoids changing seen/unseen flags during triage fetch.
+        client.select(self.mailbox, readonly=True)
+        search_criteria = os.getenv("IMAP_SEARCH_CRITERIA", "ALL").strip() or "ALL"
+        status, data = client.uid("search", None, search_criteria)
+        if status != "OK":
+            status, data = client.uid("search", None, "ALL")
         all_uids = [uid.decode("utf-8") for uid in (data[0] or b"").split()]
         selected_uids = list(reversed(all_uids[-limit:]))
 
         items: List[ProviderEmail] = []
         for uid in selected_uids:
-            _, msg_data = client.uid("fetch", uid, "(RFC822)")
+            # Use BODY.PEEK[] so triage inspection does not mark unread mail as seen.
+            _, msg_data = client.uid("fetch", uid, "(BODY.PEEK[])")
             raw = msg_data[0][1] if msg_data and msg_data[0] else b""
             message = email.message_from_bytes(raw)
             sender = _decode_header_value(message.get("From"))
@@ -372,8 +436,27 @@ def create_escalation_ticket(email_record: Email, note: Optional[str]) -> Dict[s
         "type": email_record.type,
         "note": note or "Escalated by triage policy",
     }
+    allowed, reason = _should_send_escalation_notification(email_record)
+    if not allowed:
+        return {
+            "status": "escalation_filtered",
+            "reason": reason,
+            "details": payload,
+        }
+
     if webhook:
-        response = httpx.post(webhook, json=payload, timeout=20.0)
+        if webhook.startswith("https://hooks.slack.com/"):
+            slack_text = (
+                "🚨 *EETRE Live Escalation*\n"
+                f"From: {email_record.sender}\n"
+                f"Subject: {email_record.subject}\n"
+                f"Priority: {email_record.priority}\n"
+                f"Type: {email_record.type}\n"
+                f"Note: {payload['note']}"
+            )
+            response = httpx.post(webhook, json={"text": slack_text}, timeout=20.0)
+        else:
+            response = httpx.post(webhook, json=payload, timeout=20.0)
         response.raise_for_status()
         return {"status": "escalated", "destination": webhook}
     return {"status": "escalation_queued", "details": payload}
@@ -422,7 +505,8 @@ class LiveEmailSession:
             task_id="live_inbox",
             objective="Triage and execute actions on live enterprise email inbox",
             difficulty="hard",
-            inbox=[self.email_by_id[k] for k in sorted(self.email_by_id.keys())],
+            # Preserve provider fetch order (usually newest-first) for clearer operator logs.
+            inbox=list(self.email_by_id.values()),
             processed_email_ids=list(self.processed_email_ids),
             step_count=self.step_count,
             max_steps=self.max_steps,

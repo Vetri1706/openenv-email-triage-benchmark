@@ -116,19 +116,33 @@ All tasks have primary expected outcomes in `env/tasks.py`, with selected ambigu
 
 ```text
 openenv-email-triage/
-├── env/
-│   ├── __init__.py
+├── env/                      # core environment + orchestrator logic
 │   ├── environment.py
-│   ├── models.py
-│   ├── tasks.py
+│   ├── agent_brain.py
+│   ├── agent_orchestrator.py
 │   ├── grader.py
-│   └── data.py
-├── inference.py
-├── openenv.yaml
-├── Dockerfile
-├── requirements.txt
+│   ├── tasks.py
+│   ├── data.py
+│   ├── models.py
+│   └── __init__.py
+├── server/                   # API entrypoint package
+│   ├── app.py
+│   └── __init__.py
+├── static/                   # dashboard UI assets
+│   ├── index.html
+│   ├── script.js
+│   └── style.css
+├── app.py                    # FastAPI launch entrypoint
+├── inference.py              # benchmark/live agent loop runner
+├── agent_adapter.py          # reusable OpenEnv adapter
+├── live_agent_loop.py        # strict step-by-step live loop
+├── send_live_reply.py        # targeted live action utility
+├── openenv.yaml              # OpenEnv metadata
+├── pyproject.toml            # packaging metadata
+├── requirements.txt          # runtime dependencies
+├── Dockerfile                # HF Space / container deploy
 ├── README.md
-└── app.py
+└── AGENTS.md                 # workspace agent guidance
 ```
 
 ## Setup (Local)
