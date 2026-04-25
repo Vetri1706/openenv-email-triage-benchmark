@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from typing import Dict, List, Set, Tuple
 
+try:
+    from openenv import Environment
+    BASE = Environment
+except ImportError:
+    BASE = object
+
 from .grader import GradeContext, grade_action
 from .models import Action, Observation, Reward
 from .tasks import TASKS, TaskConfig, get_task, get_task_emails
 
 
-class EnterpriseEmailTriageEnvironment:
+class EnterpriseEmailTriageEnvironment(BASE):
     def __init__(self, default_task_id: str = "easy") -> None:
         self.default_task_id = default_task_id
         self.current_task: TaskConfig = get_task(default_task_id)

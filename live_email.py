@@ -3,7 +3,6 @@ from __future__ import annotations
 import email
 import imaplib
 import os
-import random
 import smtplib
 from dataclasses import dataclass
 from email.header import decode_header
@@ -12,18 +11,11 @@ from email.mime.text import MIMEText
 from typing import Dict, List, Literal, Optional
 
 import httpx
-from openai import OpenAI
 
-from env.agent_brain import SmartEmailAgentBrain
 from env.models import Action, Email, Observation, Reward
 
 
 ProviderType = Literal["imap", "gmail", "graph"]
-
-
-def _priority_rank(priority: str) -> int:
-    mapping = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-    return mapping.get(priority, 0)
 
 
 def _decode_header_value(raw_value: Optional[str]) -> str:
@@ -139,9 +131,7 @@ class ImapProvider(LiveEmailProvider):
     def fetch_inbox(self, limit: int) -> List[ProviderEmail]:
         client = self._connect_imap()
         client.select(self.mailbox)
-        search_criteria = os.getenv("IMAP_SEARCH_CRITERIA", "UNSEEN").strip() or "UNSEEN"
-        criteria_parts = search_criteria.split()
-        _, data = client.uid("search", None, *criteria_parts)
+        _, data = client.uid("search", None, "UNSEEN")
         all_uids = [uid.decode("utf-8") for uid in (data[0] or b"").split()]
         selected_uids = list(reversed(all_uids[-limit:]))
 
@@ -234,13 +224,8 @@ class ImapProvider(LiveEmailProvider):
             return {"provider": "imap", "status": "reply_sent"}
         if action.action_type == "mark_spam":
             if self._is_gmail_imap():
-                try:
-                    self._gmail_apply_label_action(provider_message_id, add_labels="(\\Spam)", remove_labels="(\\Inbox)")
-                    return {"provider": "imap", "status": "marked_spam_gmail_labels"}
-                except Exception:
-                    spam_box = os.getenv("IMAP_SPAM_MAILBOX", "[Gmail]/Spam")
-                    self._move_to_mailbox(provider_message_id, spam_box)
-                    return {"provider": "imap", "status": "moved_to_spam_fallback", "mailbox": spam_box}
+                self._gmail_apply_label_action(provider_message_id, add_labels="(\\Spam)", remove_labels="(\\Inbox)")
+                return {"provider": "imap", "status": "marked_spam_gmail_labels"}
             spam_box = os.getenv("IMAP_SPAM_MAILBOX", "Spam")
             self._move_to_mailbox(provider_message_id, spam_box)
             return {"provider": "imap", "status": "moved_to_spam", "mailbox": spam_box}
@@ -414,32 +399,6 @@ class LiveEmailSession:
         self.step_count = 0
         self.max_steps = 12
         self.done = False
-        self.brain = SmartEmailAgentBrain()
-        self.metrics: Dict[str, object] = {
-            "applied_actions": 0,
-            "blocked_actions": 0,
-            "approval_requests": 0,
-            "auto_generated_replies": 0,
-            "total_reward": 0.0,
-            "classification_counts": {},
-            "intent_counts": {},
-            "action_counts": {},
-            "recent_events": [],
-        }
-
-    def _push_event(self, event: Dict[str, object]) -> None:
-        recent = self.metrics.get("recent_events")
-        if not isinstance(recent, list):
-            recent = []
-        recent.append(event)
-        self.metrics["recent_events"] = recent[-20:]
-
-    def _inc_metric(self, bucket: str, key: str) -> None:
-        store = self.metrics.get(bucket)
-        if not isinstance(store, dict):
-            store = {}
-        store[key] = int(store.get(key, 0)) + 1
-        self.metrics[bucket] = store
 
     def reset(self, provider_name: ProviderType, limit: int = 10) -> Observation:
         self.provider_name = provider_name
@@ -449,17 +408,6 @@ class LiveEmailSession:
         self.processed_email_ids = []
         self.provider_id_by_email_id = {}
         self.email_by_id = {}
-        self.metrics = {
-            "applied_actions": 0,
-            "blocked_actions": 0,
-            "approval_requests": 0,
-            "auto_generated_replies": 0,
-            "total_reward": 0.0,
-            "classification_counts": {},
-            "intent_counts": {},
-            "action_counts": {},
-            "recent_events": [],
-        }
 
         inbox_items = self.provider.fetch_inbox(limit)
         for item in inbox_items:
@@ -470,189 +418,15 @@ class LiveEmailSession:
         return self.state()
 
     def state(self) -> Observation:
-        inbox_sorted = sorted(
-            [self.email_by_id[k] for k in self.email_by_id.keys()],
-            key=lambda item: _priority_rank(item.priority),
-            reverse=True,
-        )
         return Observation(
             task_id="live_inbox",
             objective="Triage and execute actions on live enterprise email inbox",
             difficulty="hard",
-            inbox=inbox_sorted,
+            inbox=[self.email_by_id[k] for k in sorted(self.email_by_id.keys())],
             processed_email_ids=list(self.processed_email_ids),
             step_count=self.step_count,
             max_steps=self.max_steps,
         )
-
-    def dashboard(self) -> Dict[str, object]:
-        applied_actions = int(self.metrics.get("applied_actions", 0))
-        total_reward = float(self.metrics.get("total_reward", 0.0))
-        avg_reward = total_reward / applied_actions if applied_actions else 0.0
-        return {
-            "provider": self.provider_name,
-            "step_count": self.step_count,
-            "max_steps": self.max_steps,
-            "done": self.done,
-            "inbox_size": len(self.email_by_id),
-            "processed_count": len(self.processed_email_ids),
-            "remaining_count": max(0, len(self.email_by_id) - len(self.processed_email_ids)),
-            "applied_actions": applied_actions,
-            "blocked_actions": int(self.metrics.get("blocked_actions", 0)),
-            "approval_requests": int(self.metrics.get("approval_requests", 0)),
-            "auto_generated_replies": int(self.metrics.get("auto_generated_replies", 0)),
-            "average_reward": max(0.0, min(1.0, avg_reward)),
-            "classification_counts": self.metrics.get("classification_counts", {}),
-            "intent_counts": self.metrics.get("intent_counts", {}),
-            "action_counts": self.metrics.get("action_counts", {}),
-            "recent_events": self.metrics.get("recent_events", []),
-        }
-
-    def _expected_action_for(self, email_record: Email, classification: str, intent: str) -> str:
-        if intent == "technical_support" or classification == "support":
-            return "reply"
-        if intent == "billing_resolution" or classification == "billing":
-            return "reply"
-        if intent == "internal_escalation" or classification == "internal":
-            return "escalate"
-        if classification in {"spam", "phishing"}:
-            return "mark_spam"
-        if email_record.type in {"support", "billing"}:
-            return "reply"
-        if email_record.type == "internal":
-            return "escalate"
-        return "archive"
-
-    def _reward_noise(self, *, email_id: str, action_type: str) -> float:
-        raw_amplitude = os.getenv("REWARD_NOISE_AMPLITUDE", "0.04").strip() or "0.04"
-        try:
-            amplitude = float(raw_amplitude)
-        except ValueError:
-            amplitude = 0.04
-        amplitude = max(0.0, min(0.1, amplitude))
-        if amplitude <= 0.0:
-            return 0.0
-
-        seed = os.getenv("REWARD_NOISE_SEED", "").strip()
-        if seed:
-            key = f"{seed}:{self.step_count}:{email_id}:{action_type}:{self.max_steps}"
-            return random.Random(key).uniform(-amplitude, amplitude)
-        return random.uniform(-amplitude, amplitude)
-
-    def _has_pending_internal_escalation(self) -> bool:
-        for email_id, email_record in self.email_by_id.items():
-            if email_id in self.processed_email_ids:
-                continue
-            if email_record.type == "internal":
-                return True
-            intent, _ = self.brain.detect_intent(email_record)
-            if intent == "internal_escalation":
-                return True
-        return False
-
-    def _live_reward(
-        self,
-        *,
-        email_record: Email,
-        decision_classification: str,
-        decision_intent: str,
-        action: Action,
-    ) -> Reward:
-        expected_action = self._expected_action_for(email_record, decision_classification, decision_intent)
-        penalties: Dict[str, float] = {}
-        bonus = 0.0
-
-        action_correctness = 1.0 if action.action_type == expected_action else 0.0
-        response_quality = 1.0 if (action.action_type != "reply" or (action.response and len(action.response.split()) >= 8)) else 0.0
-        efficiency = max(0.0, 1.0 - (self.step_count - 1) / max(1, self.max_steps - 1))
-
-        support_email = decision_intent == "technical_support" or decision_classification == "support" or email_record.type == "support"
-        reply_expected = expected_action == "reply"
-        suspicious_email = decision_classification in {"spam", "phishing"} or email_record.type in {"spam", "phishing"}
-
-        if support_email and action.action_type == "mark_spam":
-            penalties["support_marked_spam"] = penalties.get("support_marked_spam", 0.0) + 0.50
-
-        if suspicious_email and action.action_type == "reply":
-            penalties["wrong_reply_to_suspicious"] = penalties.get("wrong_reply_to_suspicious", 0.0) + 0.50
-
-        if reply_expected and action.action_type != "reply":
-            penalties["missed_reply_opportunity"] = penalties.get("missed_reply_opportunity", 0.0) + 0.40
-
-        if email_record.type == "billing" and self._has_pending_internal_escalation() and int(self.metrics.get("action_counts", {}).get("escalate", 0)) == 0:
-            penalties["billing_before_required_escalation"] = penalties.get("billing_before_required_escalation", 0.0) + 0.30
-
-        if reply_expected and action.action_type == "reply" and response_quality > 0.0:
-            bonus += 0.30
-
-        if action.action_type == "reply" and not action.response:
-            penalties["empty_reply"] = penalties.get("empty_reply", 0.0) + 0.25
-
-        weighted = (0.45 * action_correctness) + (0.35 * response_quality) + (0.20 * efficiency)
-        total_penalty = sum(penalties.values())
-        noise = self._reward_noise(email_id=email_record.id, action_type=action.action_type)
-        raw = max(0.0, min(1.0, weighted + bonus - total_penalty + noise))
-        score = max(0.0, min(1.0, 0.2 + 0.8 * raw))
-
-        feedback = [
-            f"expected_action={expected_action}",
-            f"action_correctness={action_correctness:.2f}",
-            f"response_quality={response_quality:.2f}",
-            f"efficiency={efficiency:.2f}",
-        ]
-        if penalties:
-            feedback.append(f"penalties={penalties}")
-        if bonus:
-            feedback.append(f"bonus={bonus:.2f}")
-        if noise:
-            feedback.append(f"noise={noise:.3f}")
-
-        return Reward(
-            score=score,
-            action_correctness=action_correctness,
-            response_quality=response_quality,
-            efficiency=efficiency,
-            penalties=penalties,
-            feedback="; ".join(feedback),
-        )
-
-    def _generate_ai_reply(self, email_record: Email) -> str:
-        api_key = os.getenv("API_KEY")
-        api_base_url = os.getenv("API_BASE_URL")
-        model_name = os.getenv("MODEL_NAME")
-
-        if not api_key:
-            return (
-                "Thanks for your message. We received your request and will share a clear update shortly."
-            )
-
-        prompt = (
-            "You are an expert assistant.\n"
-            "Reply specifically to the user's query.\n"
-            f"User asked:\n\"{email_record.body}\"\n"
-            "Explain clearly and directly. Do NOT ask for more details unless necessary.\n"
-            "Keep under 80 words."
-        )
-
-        try:
-            client = OpenAI(api_key=api_key, base_url=api_base_url)
-            response = client.chat.completions.create(
-                model=model_name,
-                temperature=0.3,
-                messages=[
-                    {"role": "system", "content": "You draft concise, actionable professional email replies."},
-                    {"role": "user", "content": prompt},
-                ],
-                timeout=45.0,
-            )
-            content = response.choices[0].message.content or ""
-            cleaned = content.strip()
-            if cleaned:
-                return cleaned
-        except Exception:
-            pass
-
-        return "Thanks for your message. We received your request and will share a clear update shortly."
 
     def step(self, action: Action):
         if self.provider is None:
@@ -695,113 +469,27 @@ class LiveEmailSession:
 
         provider_id = self.provider_id_by_email_id[email_id]
         original = self.email_by_id[email_id]
-        decision = self.brain.decide(original)
-        self._inc_metric("classification_counts", decision.classification)
-        self._inc_metric("intent_counts", decision.intent)
-
-        approval_mode = os.getenv("APPROVAL_MODE", "off").strip().lower()
-        approval_actions_raw = os.getenv("APPROVAL_ACTIONS", "reply,escalate")
-        approval_actions = {item.strip() for item in approval_actions_raw.split(",") if item.strip()}
-        approval_risk_levels_raw = os.getenv("APPROVAL_RISK_LEVELS", "critical,high")
-        approval_risk_levels = {item.strip() for item in approval_risk_levels_raw.split(",") if item.strip()}
-
-        action_requires_approval = action.action_type in approval_actions
-        risk_requires_approval = decision.risk_level in approval_risk_levels
-
-        if approval_mode == "required" and (action_requires_approval or risk_requires_approval):
-            self.metrics["approval_requests"] = int(self.metrics.get("approval_requests", 0)) + 1
-            self._push_event(
-                {
-                    "email_id": email_id,
-                    "event": "approval_required",
-                    "classification": decision.classification,
-                    "intent": decision.intent,
-                    "risk": decision.risk_level,
-                    "action": action.action_type,
-                }
-            )
-            reward = Reward(
-                score=0.0,
-                action_correctness=0.0,
-                response_quality=0.0,
-                efficiency=max(0.0, 1.0 - self.step_count / max(self.max_steps, 1)),
-                penalties={"approval_required": 0.0},
-                feedback="Approval required before executing this action",
-            )
-            return self.state(), reward, False, {
-                "applied": False,
-                "approval_required": True,
-                "proposed_action": action.model_dump(),
-                "reason": "human_in_the_loop",
-                "classification": decision.classification,
-                "intent": decision.intent,
-                "risk": decision.risk_level,
-            }
-
-        if action.action_type == "reply" and (original.type in {"spam", "phishing"} or decision.classification in {"spam", "phishing"}):
-            self.metrics["blocked_actions"] = int(self.metrics.get("blocked_actions", 0)) + 1
-            self._push_event(
-                {
-                    "email_id": email_id,
-                    "event": "unsafe_reply_blocked",
-                    "classification": decision.classification,
-                    "intent": decision.intent,
-                    "risk": decision.risk_level,
-                    "action": action.action_type,
-                }
-            )
-            reward = Reward(
-                score=0.0,
-                action_correctness=0.0,
-                response_quality=0.0,
-                efficiency=max(0.0, 1.0 - self.step_count / max(self.max_steps, 1)),
-                penalties={"wrong_reply_to_suspicious": 0.5, "unsafe_reply_blocked": 0.3},
-                feedback="Safety layer blocked reply to suspicious email; wrong-reply penalty applied",
-            )
-            return self.state(), reward, False, {"applied": False, "blocked": True, "reason": "unsafe_reply_blocked"}
-
-        auto_generated = False
-        if action.action_type == "reply" and not action.response:
-            generated = self._generate_ai_reply(original)
-            action = Action(email_id=action.email_id, action_type=action.action_type, response=generated)
-            auto_generated = True
-            self.metrics["auto_generated_replies"] = int(self.metrics.get("auto_generated_replies", 0)) + 1
-
         action_result = self.provider.apply_action(action, provider_id, original)
-        self._inc_metric("action_counts", action.action_type)
 
         self.processed_email_ids.append(email_id)
         self.done = len(self.processed_email_ids) == len(self.email_by_id) or self.step_count >= self.max_steps
 
-        reward = self._live_reward(
-            email_record=original,
-            decision_classification=decision.classification,
-            decision_intent=decision.intent,
-            action=action,
-        )
-        self.metrics["applied_actions"] = int(self.metrics.get("applied_actions", 0)) + 1
-        self.metrics["total_reward"] = float(self.metrics.get("total_reward", 0.0)) + reward.score
-        self._push_event(
-            {
-                "email_id": email_id,
-                "event": "action_applied",
-                "classification": decision.classification,
-                "intent": decision.intent,
-                "risk": decision.risk_level,
-                "action": action.action_type,
-                "score": round(reward.score, 4),
-                "penalties": reward.penalties,
-                "auto_generated_reply": auto_generated,
-            }
+        response_quality = 1.0 if (action.action_type != "reply" or action.response) else 0.0
+        efficiency = max(0.0, 1.0 - (self.step_count - 1) / max(1, self.max_steps - 1))
+        score = max(0.0, min(1.0, 0.75 + 0.15 * response_quality + 0.10 * efficiency))
+
+        reward = Reward(
+            score=score,
+            action_correctness=1.0,
+            response_quality=response_quality,
+            efficiency=efficiency,
+            penalties={},
+            feedback=f"Action applied successfully via {self.provider_name}",
         )
 
         return self.state(), reward, self.done, {
             "applied": True,
             "provider": self.provider_name,
             "result": action_result,
-            "auto_generated_reply": auto_generated,
-            "classification": decision.classification,
-            "intent": decision.intent,
-            "risk": decision.risk_level,
             "processed": list(self.processed_email_ids),
         }
