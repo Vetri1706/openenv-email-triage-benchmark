@@ -8,11 +8,16 @@ from dataclasses import dataclass
 from email.header import decode_header
 from email.message import Message
 from email.mime.text import MIMEText
+from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 import httpx
+from dotenv import load_dotenv
 
 from env.models import Action, Email, Observation, Reward
+
+# Repo-root `.env` (works even when cwd is not the project directory).
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 
 ProviderType = Literal["imap", "gmail", "graph"]
@@ -426,7 +431,7 @@ class GraphProvider(LiveEmailProvider):
 
 
 def create_escalation_ticket(email_record: Email, note: Optional[str]) -> Dict[str, object]:
-    webhook = os.getenv("ESCALATION_WEBHOOK_URL", "")
+    webhook = (os.getenv("ESCALATION_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK") or "").strip()
     payload = {
         "source": "eetre",
         "email_id": email_record.id,
@@ -458,7 +463,11 @@ def create_escalation_ticket(email_record: Email, note: Optional[str]) -> Dict[s
         else:
             response = httpx.post(webhook, json=payload, timeout=20.0)
         response.raise_for_status()
-        return {"status": "escalated", "destination": webhook}
+        return {
+            "status": "escalated",
+            "destination": webhook,
+            "http_status": response.status_code,
+        }
     return {"status": "escalation_queued", "details": payload}
 
 

@@ -468,6 +468,17 @@ def run_loop(
             f"Result  : applied={info.get('applied')} | approval_required={info.get('approval_required', False)} "
             f"| reward={reward.score:.4f} | done={done}"
         )
+        res = info.get("result")
+        if action.action_type == "escalate" and isinstance(res, dict):
+            st = res.get("status")
+            if st == "escalated":
+                print(f"Notify  : Slack posted (HTTP {res.get('http_status', '?')})")
+            elif st == "escalation_filtered":
+                print(f"Notify  : Slack skipped — escalation filter ({res.get('reason', '')})")
+            elif st == "escalation_queued":
+                print("Notify  : Slack skipped — ESCALATION_WEBHOOK_URL empty in environment")
+            else:
+                print(f"Notify  : {res}")
 
         if info.get('approval_required'):
             break

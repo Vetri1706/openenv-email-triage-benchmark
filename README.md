@@ -112,7 +112,9 @@ Embedded images load from **GitHub `raw`** so they work in the GitHub UI and in 
 
 ![Independent benchmark on EETRE](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/nexttoken_output.png)
 
-> Third-party benchmark surface comparing frontier models on this environment.
+> Third-party tool run on this repo for a quick sanity check—not part of EETRE’s training stack.
+
+**Context:** [Nitish Kulkarni](mailto:nitish@nexttoken.app) (ex–Google ML/AI, building [**NextToken**](https://nexttoken.app)) emailed in April 2026 with a free preview flow: exploratory analysis, model training, and interactive dashboards in a notebook-style agent. He linked a **pre-populated prompt** to run on [`openenv-email-triage-benchmark`](https://github.com/Vetri1706/openenv-email-triage-benchmark) (the screenshot above is from that run). EETRE itself stays OpenEnv + TRL + your Space; NextToken is **optional external validation** and a nice “someone else drove the repo in a UI” datapoint for judges.
 
 | Step | What it signals |
 |------|-----------------|

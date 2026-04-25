@@ -1,9 +1,15 @@
 
 import email
+import os
+from pathlib import Path
+
 import requests
 import smtplib
-import os
+from dotenv import load_dotenv
 from email.mime.text import MIMEText
+
+# Load repo `.env` when present (avoids `source .env` breaking on spaced values like app passwords).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # 🔐 PUT YOUR NEW SLACK WEBHOOK HERE (old one may be revoked)
 # Use .env-based webhook configuration for safety and portability.
@@ -14,6 +20,20 @@ SLACK_WEBHOOK = (
 )
 
 BASE_URL = "https://Vetri17-openenv-email-triage-benchmark.hf.space"
+
+
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _slack_demo_mode() -> bool:
+    """
+    Demo-only Slack mode for recordings.
+
+    Default behavior: Slack only on escalate.
+    Demo mode: Slack on every action (reply/archive/mark_spam/escalate).
+    """
+    return _env_truthy("ORCHESTRATOR_DEMO_SLACK")
 
 
 # =========================
@@ -33,11 +53,13 @@ def notify_slack(email, action, reward_score, reasoning, response):
         "archive": "📁"
     }.get(action, "📧")
 
+    demo_prefix = "*DEMO MODE:* " if _slack_demo_mode() else ""
+
     if action == "escalate":
         top_signal = reasoning.get("signals", ["no signal"])[0]
         intent = reasoning.get("intent", "general").replace("_", " ").title()
         message = (
-            f"🚨 *EETRE ALERT*\n"
+            f"{demo_prefix}🚨 *EETRE ALERT*\n"
             f"From: {email['sender']}\n"
             f"Subject: {email['subject']}\n\n"
             f"Intent: {intent}\n"
@@ -49,7 +71,7 @@ def notify_slack(email, action, reward_score, reasoning, response):
 
     elif action == "mark_spam":
         message = (
-            f"🚫 *EETRE SPAM BLOCKED*\n"
+            f"{demo_prefix}🚫 *EETRE SPAM BLOCKED*\n"
             f"*From:* {email['sender']}\n"
             f"*Subject:* {email['subject']}\n"
             f"*Sender blocked automatically*\n"
@@ -58,7 +80,7 @@ def notify_slack(email, action, reward_score, reasoning, response):
 
     elif action == "reply":
         message = (
-            f"✅ *EETRE AUTO-REPLY SENT*\n"
+            f"{demo_prefix}✅ *EETRE AUTO-REPLY SENT*\n"
             f"*To:* {email['sender']}\n"
             f"*Subject:* Re: {email['subject']}\n"
             f"*Status:* Reply dispatched automatically\n"
@@ -67,7 +89,7 @@ def notify_slack(email, action, reward_score, reasoning, response):
 
     else:
         message = (
-            f"📁 *EETRE ARCHIVED*\n"
+            f"{demo_prefix}📁 *EETRE ARCHIVED*\n"
             f"*Subject:* {email['subject']}\n"
             f"*Reason:* Low priority\n"
             f"*Score:* {reward_score:.3f}"
@@ -179,6 +201,10 @@ def run_multi_agent_episode(task="medium"):
 
     print(f"\n{'='*60}")
     print(f"TASK: {obs['objective']}")
+    if _slack_demo_mode():
+        print("Slack mode: DEMO (ORCHESTRATOR_DEMO_SLACK=1) -> Slack on every action")
+    else:
+        print("Slack mode: PRODUCTION -> Slack only on ESCALATE")
     print(f"{'='*60}")
 
     results = []
@@ -211,8 +237,8 @@ def run_multi_agent_episode(task="medium"):
         # ✅ FIXED: reward before usage
         reward = result["reward"]
 
-        # 🔔 Notify Slack only for escalations
-        if action == "escalate":
+        # 🔔 Slack notifications
+        if action == "escalate" or _slack_demo_mode():
             execution = notify_slack(
                 email,
                 action,
