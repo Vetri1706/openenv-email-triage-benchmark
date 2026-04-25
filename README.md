@@ -63,11 +63,13 @@ So I built EETRE to answer one question:
 
 ## Results
 
-Plots live in this repo at [`plots/eetre_training_results.png`](plots/eetre_training_results.png) and [`plots/eetre_reward_curve.png`](plots/eetre_reward_curve.png). They render below on **GitHub** and on **HF Space** once that commit is pushed to the default branch (if you only see alt text or a gap, those files are not on the remote yet—`git add plots/ proofs/ && git commit -m "Add training plots and proof screenshots" && git push`, then refresh your Space from GitHub if needed).
+Source files: [`plots/eetre_training_results.png`](plots/eetre_training_results.png), [`plots/eetre_reward_curve.png`](plots/eetre_reward_curve.png).
 
-![Training results (SFT / summary)](plots/eetre_training_results.png)
+Embedded images use **Hugging Face `resolve` URLs** so the Space README can load them from this repo’s `main` branch. **Pushing PNGs to `hf` requires [Git Xet](https://huggingface.co/docs/hub/xet/using-xet-storage#git)** — see [`SPACE_PUSH.md`](SPACE_PUSH.md) for a short setup checklist (Hub rejects raw binary blobs without it).
 
-![Reward curve (curriculum / GRPO)](plots/eetre_reward_curve.png)
+![Training results (SFT / summary)](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/resolve/main/plots/eetre_training_results.png)
+
+![Reward curve (curriculum / GRPO)](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/resolve/main/plots/eetre_reward_curve.png)
 
 | Metric | Value |
 |---|---|
@@ -84,31 +86,31 @@ Plots live in this repo at [`plots/eetre_training_results.png`](plots/eetre_trai
 
 ### 1. Real inbox chaos
 
-![Mixed inbox: spam, notifications, and critical mail](proofs/spam_where_sent_because_of_bulk.png)
+![Mixed inbox: spam, notifications, and critical mail](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/resolve/main/proofs/spam_where_sent_because_of_bulk.png)
 
 > Mixed inbox with spam, notifications, and critical emails.
 
 ### 2. Critical incident detected
 
-![Production-style email needing attention](proofs/Test_mail_for_slack.png)
+![Production-style email needing attention](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/resolve/main/proofs/Test_mail_for_slack.png)
 
 > Example of a production issue email requiring immediate attention.
 
 ### 3. Intelligent escalation (core feature)
 
-![Structured escalation to Slack](proofs/slack_output.png)
+![Structured escalation to Slack](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/resolve/main/proofs/slack_output.png)
 
 > The agent escalates critical incidents to Slack with structured context.
 
 ### 4. Context-aware response
 
-![Automated reply with substance](proofs/reply_message_automated.png)
+![Automated reply with substance](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/resolve/main/proofs/reply_message_automated.png)
 
 > Meaningful replies instead of generic auto-responses when a reply is the right action.
 
 ### 5. External validation
 
-![Independent benchmark on EETRE](proofs/nexttoken_output.png)
+![Independent benchmark on EETRE](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/resolve/main/proofs/nexttoken_output.png)
 
 > Third-party benchmark surface comparing frontier models on this environment.
 
@@ -135,6 +137,7 @@ curl -X POST https://Vetri17-openenv-email-triage-benchmark.hf.space/reset \
 ## Links
 
 - HF Space: https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark
+- Push Space from Git (Xet / binaries): [`SPACE_PUSH.md`](SPACE_PUSH.md)
 - Colab (training): https://colab.research.google.com/github/Vetri1706/openenv-email-triage-benchmark/blob/main/notebooks/eetre_training.ipynb
 - Training script (local / TRL): [`eetre_grpo_final.py`](https://github.com/Vetri1706/openenv-email-triage-benchmark/blob/main/eetre_grpo_final.py) — Python script that runs **GRPO** (Group Relative Policy Optimization via Hugging Face **TRL**) against your live HF Space `/reset` + `/step` API; produces the metrics above and can save a fine-tuned model.
 - GitHub: https://github.com/Vetri1706/openenv-email-triage-benchmark
