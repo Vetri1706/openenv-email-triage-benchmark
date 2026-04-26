@@ -29,6 +29,8 @@ app = FastAPI(title="Enterprise Email Triage & Response Environment", version="1
 environment = EnterpriseEmailTriageEnvironment()
 live_session = LiveEmailSession()
 
+GRADIO_MOUNTED = False
+
 # Serve static files (HTML, CSS, JS)
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
@@ -37,7 +39,10 @@ if os.path.exists(static_dir):
 
 @app.get("/")
 def root():
-    """Serve the UI dashboard or fallback JSON"""
+    """Land judges on the live Gradio UI when available; fall back to the
+    static dashboard so the Space still renders if gradio failed to install."""
+    if GRADIO_MOUNTED:
+        return RedirectResponse(url="/ui/")
     index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
@@ -47,6 +52,7 @@ def root():
             "health": "/health",
             "docs": "/docs",
             "web": "/web",
+            "ui": "/ui",
         }
     )
 
@@ -154,6 +160,7 @@ try:
     from ui import demo as gradio_demo
 
     app = gr.mount_gradio_app(app, gradio_demo, path="/ui")
+    GRADIO_MOUNTED = True
 except Exception as _gradio_exc:
     import logging
 
