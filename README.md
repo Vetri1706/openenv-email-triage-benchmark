@@ -9,143 +9,165 @@ pinned: true
 
 # EETRE — Enterprise Email Triage & Response Environment
 
-Inbox chaos? Same.  
-EETRE is an OpenEnv environment that trains an LLM agent to handle enterprise email like a real ops teammate.
+> Trains an LLM agent to triage enterprise email through RL — not just classify, but act.
 
-It does 4 practical actions:
-- `reply`
-- `escalate`
-- `archive`
-- `mark_spam`
+## 🔗 Links
 
-And yes, escalation can send real Slack alerts.
-
----
-
-## Why I Built This
-
-I was missing important emails because of volume.  
-Promotions, spam, notifications, and real incidents were all mixed together.
-
-So I built EETRE to answer one question:
-**Can an agent make correct workflow decisions in a real inbox, not just classify text?**
-
----
-
-## Theme Fit (Hackathon)
-
-- **Theme #1: Multi-Agent Interactions**
-  - Reasoning Agent -> Decision Agent -> Auditor Agent
-- **Theme #3: World Modeling (Professional Tasks)**
-  - Real mailbox actions via IMAP/SMTP + Slack escalation webhook
-
----
-
-## What The Agent Sees and Does
-
-| Item | Details |
+| | |
 |---|---|
-| Agent sees | sender, subject, body, priority |
-| Agent can do | `reply`, `escalate`, `archive`, `mark_spam` |
-| Reward based on | action correctness, response quality, efficiency |
-| Modes | simulated curriculum + live mailbox |
+| 🤗 HF Space | https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark |
+| 📓 Colab | https://colab.research.google.com/drive/1s7hBuQe93gA1yzKJ0_tcNauOEFeq4yEF?usp=sharing |
+| 💻 GitHub | https://github.com/Vetri1706/openenv-email-triage-benchmark |
+| 🎥 Video | https://youtu.be/ndwF3Rp_f2Q |
+| 📝 Blog | https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/blob/main/Blog.md |
 
 ---
 
-## Multi-Agent Flow (Simple)
+## One Line
 
-1. **Reasoning Agent** reads the email and finds intent/risk.
-2. **Decision Agent** picks one action.
-3. **Auditor Agent** blocks unsafe choices (example: replying to suspicious mail).
-4. Environment executes action and returns reward.
+EETRE turns inbox chaos into actionable workflows — an RL-trained
+agent that reads, decides, and executes on real enterprise email.
 
 ---
 
-## Results
+## What It Does
 
-Source files: [`plots/eetre_training_results.png`](plots/eetre_training_results.png), [`plots/eetre_reward_curve.png`](plots/eetre_reward_curve.png).
+| Action | What happens |
+|---|---|
+| reply | LLM generates contextual reply and sends via SMTP |
+| escalate | Real Slack alert to #incidents or #security-alerts |
+| archive | Filed silently, no noise |
+| mark_spam | Sender blocked, no reply |
 
-Embedded images load from **GitHub `raw`** so they work in the GitHub UI and in the **Space README** without storing PNGs in the Space Git repo (HF rejects large/binary PNG pushes unless you use [Git Xet](https://huggingface.co/docs/hub/xet/using-xet-storage#git)). Push **`origin` first** so these URLs resolve, then push the Space using [`SPACE_PUSH.md`](SPACE_PUSH.md) (Xet **or** the no-binary `scripts/push_hf_lite.sh`).
+---
 
-![Training results (SFT / summary)](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/plots/eetre_training_results.png)
+## 3-Agent Architecture
+ Reasoning Agent
+↓
+ Decision Agent
+↓
+ Auditor Agent
+↓
+ Evaluator — reward returned to training loop
+↓
+ Execution — Slack / SMTP / block
 
-![Reward curve (curriculum / GRPO)](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/plots/eetre_reward_curve.png)
+ ---
+
+## Training Results
+
+![Training Results](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/plots/eetre_training_results.png)
+*SFT loss 37.5 to 18.1 | GRPO reward 0.608 to 0.833 over 96 steps*
+
+![Reward Curve](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/plots/eetre_reward_curve.png)
+*Curriculum training: easy to medium to hard. Reward stays 0.8+ throughout.*
 
 | Metric | Value |
 |---|---|
-| SFT loss reduction | 37.5 -> 18.1 (51%) |
-| GRPO reward improvement | 0.608 -> 0.833 (37%) |
+| SFT loss reduction | 37.5 to 18.1 (51%) |
+| GRPO reward improvement | 0.608 to 0.833 (37%) |
 | Training steps | 96 |
 | Avg trained reward | 0.836 |
+| Data | 180 simulated + 11 live Gmail emails |
+| Model | Qwen2.5-0.5B + LoRA r=16 via Unsloth |
 
 ---
 
-## End-to-end system in action
+## End-to-End in Action
 
-**Problem → system → proof → impact** in five steps.
+### Real inbox chaos
+![Mixed inbox](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/spam_where_sent_because_of_bulk.png)
+*Spam, notifications, and critical emails all mixed together*
 
-### 1. Real inbox chaos
+### Critical incident detected
+![Production email](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/Test_mail_for_slack.png)
+*Production issue email flagged for immediate attention*
 
-![Mixed inbox: spam, notifications, and critical mail](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/spam_where_sent_because_of_bulk.png)
+### Intelligent Slack escalation
+![Slack output](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/slack_output.png)
+*Agent escalates to Slack with full context — not a generic ping*
 
-> Mixed inbox with spam, notifications, and critical emails.
+### Context-aware reply
+![Automated reply](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/reply_message_automated.png)
+*LLM generates a meaningful specific reply — not a template*
 
-### 2. Critical incident detected
+### External validation
+![NextToken benchmark](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/nexttoken_output.png)
+*Ex-Google ML engineer independently benchmarked 5 frontier models on EETRE*
 
-![Production-style email needing attention](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/Test_mail_for_slack.png)
+After publishing, Nitish Kulkarni — ex-Google ML engineer building
+NextToken — independently found our repo and benchmarked 5 frontier
+models against EETRE without being asked:
 
-> Example of a production issue email requiring immediate attention.
+- claude-3-5-sonnet
+- gpt-4o
+- gemini-1.5-pro
+- gpt-4o-mini
+- llama-3-70b
 
-### 3. Intelligent escalation (core feature)
-
-![Structured escalation to Slack](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/slack_output.png)
-
-> The agent escalates critical incidents to Slack with structured context.
-
-### 4. Context-aware response
-
-![Automated reply with substance](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/reply_message_automated.png)
-
-> Meaningful replies instead of generic auto-responses when a reply is the right action.
-
-### 5. External validation
-
-![Independent benchmark on EETRE](https://raw.githubusercontent.com/Vetri1706/openenv-email-triage-benchmark/main/proofs/nexttoken_output.png)
-
-> Third-party tool run on this repo for a quick sanity check—not part of EETRE’s training stack.
-
-**Context:** [Nitish Kulkarni](mailto:nitish@nexttoken.app) (ex–Google ML/AI, building [**NextToken**](https://nexttoken.app)) emailed in April 2026 with a free preview flow: exploratory analysis, model training, and interactive dashboards in a notebook-style agent. He linked a **pre-populated prompt** to run on [`openenv-email-triage-benchmark`](https://github.com/Vetri1706/openenv-email-triage-benchmark) (the screenshot above is from that run). EETRE itself stays OpenEnv + TRL + our Space; NextToken is **optional external validation** and a nice “someone else drove the repo in a UI” datapoint for judges.
-
-| Step | What it signals |
-|------|-----------------|
-| Inbox | Problem |
-| Incident | Trigger |
-| Slack | Action |
-| Reply | Intelligence |
-| Benchmark | Credibility |
+**Average accuracy: 82%**
 
 ---
 
-## Quick Check (API)
+## Why RL?
+
+Rule-based filters are static. They break on anything new.
+
+EETRE uses a full RL pipeline:
+
+**SFT first** — trained on reward-filtered real Gmail + simulated
+curriculum (easy / medium / hard) to give the model a warm start.
+
+**Then GRPO** — Group Relative Policy Optimization via HF TRL +
+Unsloth. The live environment is the verifier. Agent generates
+actions, environment scores them, policy updates toward higher reward.
+
+The reward signal is multi-component — not just 0 or 1:
+- Correctness score from environment grader
+- Anti-repetition penalty
+- Auditor validation signal
+- Format compliance check
+
+This prevents the agent from gaming a single metric.
+
+---
+
+## Safety Design
+
+- Phishing and spam replies blocked at inference time
+- Heavy penalty in live mode if spam is replied to
+- Auditor agent validates every decision before execution
+- Approval mode: ON for human-in-the-loop, OFF to trust the agent
+
+---
+
+## How Emails Are Sourced
+
+- IMAP — pull and push on real inbox, archive, spam folders
+- Gmail — access token + user ID
+- Simulated — curriculum tasks easy / medium / hard
+
+---
+
+## Quick Start
 
 ```bash
-curl -X POST https://Vetri17-openenv-email-triage-benchmark.hf.space/reset \
+# Reset environment
+curl -X POST \
+  https://Vetri17-openenv-email-triage-benchmark.hf.space/reset \
   -H "Content-Type: application/json" \
-  -d '{"task_id":"medium"}'
+  -d '{"task_id": "medium"}'
+
+# Step with action
+curl -X POST \
+  https://Vetri17-openenv-email-triage-benchmark.hf.space/step \
+  -H "Content-Type: application/json" \
+  -d '{"email_id": "E-MED-001", "action_type": "escalate", "response": ""}'
+
+# Get state
+curl https://Vetri17-openenv-email-triage-benchmark.hf.space/state
 ```
 
 ---
 
-## Links
-
-- HF Space: https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark
-- Push Space from Git: [`SPACE_PUSH.md`](SPACE_PUSH.md) (Git **Xet** *or* no-binary script [`scripts/push_hf_lite.sh`](scripts/push_hf_lite.sh))
-- Colab (training): https://colab.research.google.com/github/Vetri1706/openenv-email-triage-benchmark/blob/main/notebooks/eetre_training.ipynb
-- Training script (local / TRL): [`eetre_grpo_final.py`](https://github.com/Vetri1706/openenv-email-triage-benchmark/blob/main/eetre_grpo_final.py) — Python script that runs **GRPO** (Group Relative Policy Optimization via Hugging Face **TRL**) against your live HF Space `/reset` + `/step` API; produces the metrics above and can save a fine-tuned model.
-- GitHub: https://github.com/Vetri1706/openenv-email-triage-benchmark
-- Blog / Video (<2 min): https://youtu.be/ndwF3Rp_f2Q
----
-
-## One-liner
-
-EETRE turns inbox chaos into actionable workflows — detecting, deciding, and executing in real time like an ops teammate.
+📖 Full story and writeup: [Blog.md](https://huggingface.co/spaces/Vetri17/openenv-email-triage-benchmark/blob/main/Blog.md)
