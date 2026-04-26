@@ -146,3 +146,19 @@ def live_dashboard() -> Dict[str, Any]:
         return {"dashboard": live_session.dashboard()}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+try:
+    import gradio as gr
+
+    from ui import demo as gradio_demo
+
+    app = gr.mount_gradio_app(app, gradio_demo, path="/ui")
+except Exception as _gradio_exc:
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "Gradio UI not mounted at /ui (%s: %s). Install `gradio` to enable it.",
+        type(_gradio_exc).__name__,
+        _gradio_exc,
+    )
